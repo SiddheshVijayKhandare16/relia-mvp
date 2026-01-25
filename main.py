@@ -3,15 +3,35 @@ import streamlit as st
 st.title("Relia MVP")
 st.subheader("Quiet classroom insight tool")
 
-question = "What is Photosynthesis?"
+# -----------------------------
+# STEP 1: Teacher sets question
+# -----------------------------
+st.markdown("### 👩‍🏫 Teacher Question Setup")
 
-st.write("📌 Question:")
-st.info(question)
+teacher_question = st.text_input(
+    "Enter today’s classroom question:",
+    "What is Photosynthesis?"
+)
 
-answer = st.text_area("✍️ Student Answer:")
+st.divider()
+
+# -----------------------------
+# Student Answer Section
+# -----------------------------
+st.markdown("### ✍️ Student Response")
+
+student_answer = st.text_area("Student Answer (type here):")
 
 if st.button("Submit Answer"):
-    st.success("✅ Answer submitted!")
+    if student_answer.strip() == "":
+        st.warning("Please write an answer before submitting.")
+    else:
+        st.success("✅ Answer submitted!")
 
-    st.write("### Teacher Insight")
-    st.write("Student understands the topic at a basic level.")
+        # Teacher insight (basic MVP logic)
+        st.markdown("## Teacher Insight")
+
+        if len(student_answer) < 20:
+            st.info("Student response is very short — may need more explanation.")
+        else:
+            st.success("Student understands the topic at a basic level.")
