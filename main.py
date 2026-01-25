@@ -1,79 +1,64 @@
 import streamlit as st
 
-st.set_page_config(page_title="Relia", layout="wide")
+# -----------------------------
+# Relia MVP (Mode Based)
+# -----------------------------
 
-# ----------------------------
-# APP TITLE
-# ----------------------------
-st.title("Relia")
+st.set_page_config(page_title="Relia", layout="centered")
 
-st.markdown("---")
+# Read mode from URL
+mode = st.query_params.get("mode", "student")
 
-# ----------------------------
-# SESSION STATE STORAGE
-# ----------------------------
-if "questions" not in st.session_state:
-    st.session_state.questions = [""] * 25
+# Shared question storage
+if "question" not in st.session_state:
+    st.session_state.question = "What is Photosynthesis?"
 
 if "answers" not in st.session_state:
-    st.session_state.answers = [""] * 25
+    st.session_state.answers = []
 
-if "submitted" not in st.session_state:
-    st.session_state.submitted = False
+# -----------------------------
+# Teacher Mode
+# -----------------------------
+if mode == "teacher":
+    st.title("Relia")
 
+    st.subheader("👩‍🏫 Teacher Panel")
 
-# ----------------------------
-# TEACHER QUESTION INPUT
-# ----------------------------
-st.header("👩‍🏫 Teacher: Enter Today's Questions")
-
-for i in range(25):
-    st.session_state.questions[i] = st.text_input(
-        f"Question {i+1}",
-        value=st.session_state.questions[i],
-        placeholder="Type question here..."
+    new_q = st.text_input(
+        "Enter today's question:",
+        value=st.session_state.question
     )
 
-st.markdown("---")
+    if st.button("Update Question"):
+        st.session_state.question = new_q
+        st.success("Question updated!")
 
-# ----------------------------
-# STUDENT ANSWER PAGE
-# ----------------------------
-st.header("🧑‍🎓 Student: Answer All Questions")
+    st.markdown("---")
 
-for i in range(25):
-    if st.session_state.questions[i].strip() != "":
-        st.session_state.answers[i] = st.text_area(
-            f"Answer for Question {i+1}: {st.session_state.questions[i]}",
-            value=st.session_state.answers[i],
-            placeholder="Write student answer here..."
-        )
+    st.subheader("📊 Answers Received")
 
-# Submit button
-if st.button("Submit All Answers"):
-    st.session_state.submitted = True
-    st.success("All answers submitted successfully!")
+    if len(st.session_state.answers) == 0:
+        st.info("No student answers yet.")
+    else:
+        for i, ans in enumerate(st.session_state.answers, 1):
+            st.write(f"{i}. {ans}")
 
-st.markdown("---")
-
-# ----------------------------
-# TEACHER INSIGHT PAGE
-# ----------------------------
-st.header("📊 Teacher Insight (All Responses)")
-
-if not st.session_state.submitted:
-    st.info("No answers submitted yet.")
+# -----------------------------
+# Student Mode
+# -----------------------------
 else:
-    for i in range(25):
-        q = st.session_state.questions[i].strip()
-        a = st.session_state.answers[i].strip()
+    st.title("Relia")
 
-        if q != "":
-            st.subheader(f"Q{i+1}: {q}")
+    st.subheader("🧑‍🎓 Student View")
 
-            if a == "":
-                st.warning("⚠️ No answer submitted.")
-            else:
-                st.write(f"✅ Student Answer: {a}")
+    st.markdown("### Question:")
+    st.info(st.session_state.question)
 
-            st.markdown("---")
+    answer = st.text_area("Your Answer:")
+
+    if st.button("Submit Answer"):
+        if answer.strip():
+            st.session_state.answers.append(answer)
+            st.success("Answer submitted!")
+        else:
+            st.warning("Please type an answer first.")
