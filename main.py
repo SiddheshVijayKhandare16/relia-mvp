@@ -78,7 +78,7 @@ if mode == "teacher":
 
         st.success(f"Session Live | Code: {st.session_state.session_id}")
 
-        student_link = f"{st.query_params.get('base','')}/?mode=student&session={st.session_state.session_id}"
+student_link = f"https://relia-mvp-qselxk47cwgfz3mbatjxa9.streamlit.app/?mode=student&session={st.session_state.session_id}"
 
         st.markdown("### Student QR")
         st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={student_link}")
