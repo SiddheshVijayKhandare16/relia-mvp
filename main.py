@@ -1,73 +1,73 @@
 import streamlit as st
-import openai
+from openai import OpenAI
+
+# OpenAI client
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.set_page_config(page_title="Relia", layout="wide")
 
-# Get API key
-openai.api_key = st.secrets.get("OPENAI_API_KEY")
+mode = st.sidebar.radio("Select Mode", ["Teacher", "Student"])
 
-st.title("Relia")
-
-mode = st.radio("Select Mode", ["Teacher", "Student"])
-
-# Store questions
+# Storage
 if "questions" not in st.session_state:
     st.session_state.questions = [""] * 25
-
-# Store answers
 if "answers" not in st.session_state:
     st.session_state.answers = [""] * 25
 
-
 # ---------------- TEACHER MODE ----------------
 if mode == "Teacher":
-    st.header("Relia – Teacher Panel")
+    st.title("Relia – Teacher Panel")
+    st.subheader("Enter today's 25 questions:")
 
     for i in range(25):
-        q = st.text_input(f"Question {i+1}", st.session_state.questions[i], key=f"q{i}")
-        st.session_state.questions[i] = q
+        st.session_state.questions[i] = st.text_input(
+            f"Question {i+1}",
+            value=st.session_state.questions[i]
+        )
 
     st.divider()
 
     if st.button("Generate AI Insight"):
-        with st.spinner("Analyzing student answers..."):
-            all_answers = "\n".join([a for a in st.session_state.answers if a.strip() != ""])
+        all_answers = "\n".join(st.session_state.answers)
+        all_questions = "\n".join(st.session_state.questions)
 
-            if all_answers.strip() == "":
-                st.warning("No student answers yet")
-            else:
-                prompt = f"""
-You are an expert teacher.
+        prompt = f"""
+You are an expert teacher assistant.
 
-Analyze these student answers and give:
-1. Overall class understanding
-2. Weak areas
-3. What teacher should reteach
-4. Smart teaching suggestion
+Questions asked:
+{all_questions}
 
 Student answers:
 {all_answers}
+
+Give:
+1. Student understanding summary
+2. Where students are confused
+3. Teaching suggestion
+4. Class performance level
 """
 
-                response = openai.ChatCompletion.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.3,
-                )
+        with st.spinner("Analyzing class..."):
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+            )
 
-                insight = response.choices[0].message.content
-                st.subheader("AI Teacher Insight")
-                st.write(insight)
-
+            insight = response.choices[0].message.content
+            st.success("AI Insight Generated")
+            st.write(insight)
 
 # ---------------- STUDENT MODE ----------------
 if mode == "Student":
-    st.header("Relia – Student Answer Page")
+    st.title("Relia – Student Answer Page")
 
-    for i, q in enumerate(st.session_state.questions):
-        if q.strip() != "":
-            ans = st.text_area(f"Q{i+1}: {q}", key=f"a{i}")
-            st.session_state.answers[i] = ans
+    for i in range(25):
+        if st.session_state.questions[i]:
+            st.session_state.answers[i] = st.text_input(
+                st.session_state.questions[i],
+                value=st.session_state.answers[i]
+            )
 
     if st.button("Submit All Answers"):
         st.success("Answers submitted successfully")
