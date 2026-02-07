@@ -1,64 +1,62 @@
 import streamlit as st
 
-# -----------------------------
-# Relia MVP (Mode Based)
-# -----------------------------
-
 st.set_page_config(page_title="Relia", layout="centered")
 
-# Read mode from URL
-mode = st.query_params.get("mode", "student")
+st.title("Relia")
 
-# Shared question storage
-if "question" not in st.session_state:
-    st.session_state.question = "What is Photosynthesis?"
+# ------------------------------
+# STORE QUESTIONS
+# ------------------------------
+if "questions" not in st.session_state:
+    st.session_state.questions = [""] * 25
 
 if "answers" not in st.session_state:
-    st.session_state.answers = []
+    st.session_state.answers = [[] for _ in range(25)]
 
-# -----------------------------
-# Teacher Mode
-# -----------------------------
-if mode == "teacher":
-    st.title("Relia")
+mode = st.radio("Select mode", ["Teacher", "Student"])
 
-    st.subheader("👩‍🏫 Teacher Panel")
+# ==============================
+# TEACHER MODE
+# ==============================
+if mode == "Teacher":
+    st.header("Teacher Panel — Enter 25 Questions")
 
-    new_q = st.text_input(
-        "Enter today's question:",
-        value=st.session_state.question
-    )
+    for i in range(25):
+        q = st.text_input(f"Question {i+1}", value=st.session_state.questions[i], key=f"q{i}")
+        st.session_state.questions[i] = q
 
-    if st.button("Update Question"):
-        st.session_state.question = new_q
-        st.success("Question updated!")
+    st.success("Questions saved automatically")
 
-    st.markdown("---")
+    st.divider()
+    st.header("View Student Answers")
 
-    st.subheader("📊 Answers Received")
+    for i in range(25):
+        if st.session_state.questions[i]:
+            st.subheader(f"Q{i+1}: {st.session_state.questions[i]}")
+            answers = st.session_state.answers[i]
 
-    if len(st.session_state.answers) == 0:
-        st.info("No student answers yet.")
-    else:
-        for i, ans in enumerate(st.session_state.answers, 1):
-            st.write(f"{i}. {ans}")
+            if len(answers) == 0:
+                st.write("No answers yet")
+            else:
+                for a in answers:
+                    st.write("•", a)
 
-# -----------------------------
-# Student Mode
-# -----------------------------
-else:
-    st.title("Relia")
+# ==============================
+# STUDENT MODE
+# ==============================
+if mode == "Student":
+    st.header("Student Answer Page")
 
-    st.subheader("🧑‍🎓 Student View")
+    for i in range(25):
+        question = st.session_state.questions[i]
 
-    st.markdown("### Question:")
-    st.info(st.session_state.question)
+        if question:
+            st.subheader(f"Q{i+1}: {question}")
+            ans = st.text_area(f"Your answer for Q{i+1}", key=f"a{i}")
 
-    answer = st.text_area("Your Answer:")
-
-    if st.button("Submit Answer"):
-        if answer.strip():
-            st.session_state.answers.append(answer)
-            st.success("Answer submitted!")
-        else:
-            st.warning("Please type an answer first.")
+            if st.button(f"Submit Q{i+1}", key=f"btn{i}"):
+                if ans.strip() != "":
+                    st.session_state.answers[i].append(ans)
+                    st.success("Answer submitted")
+                else:
+                    st.warning("Write answer first")
