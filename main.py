@@ -4,12 +4,12 @@ import qrcode
 from io import BytesIO
 import uuid
 
-# -------- OpenAI ----------
+# ---------- OPENAI ----------
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.set_page_config(page_title="Relia", layout="wide")
 
-# ---------------- SESSION STORAGE ----------------
+# ---------- SESSION STATE ----------
 if "session_active" not in st.session_state:
     st.session_state.session_active = False
 if "session_id" not in st.session_state:
@@ -23,13 +23,12 @@ if "meta" not in st.session_state:
 
 mode = st.sidebar.radio("Mode", ["Teacher", "Student"])
 
-# =================================================
-# TEACHER PANEL
-# =================================================
+# =====================================================
+# 🧑‍🏫 TEACHER PANEL
+# =====================================================
 if mode == "Teacher":
     st.title("Relia — Teacher Panel")
 
-    # Teacher info
     coaching = st.text_input("Coaching Name")
     teacher = st.text_input("Teacher Name")
     subject = st.text_input("Subject")
@@ -43,7 +42,7 @@ if mode == "Teacher":
     st.divider()
     st.subheader("Enter Questions")
 
-    for i in range(5):  # keep 5 for MVP now
+    for i in range(5):  # keep 5 for MVP
         st.session_state.questions[i] = st.text_input(
             f"Question {i+1}",
             st.session_state.questions[i]
@@ -66,23 +65,20 @@ if mode == "Teacher":
     if st.session_state.session_active:
         st.success("Session Live")
 
-        session_link = st.experimental_get_query_params()
-        base_url = st.get_option("browser.serverAddress") or ""
-        full_link = f"{st.get_option('browser.serverAddress')}?session={st.session_state.session_id}"
+        app_url = st.text_input(
+            "Paste your Streamlit app link once (save for future)",
+            ""
+        )
 
-        # fallback link
-        full_link = f"{st.runtime.scriptrunner.get_script_run_ctx().request.host_url}?session={st.session_state.session_id}"
+        if app_url:
+            student_link = f"{app_url}?session={st.session_state.session_id}"
 
-        # create QR
-        qr = qrcode.make(full_link)
-        buf = BytesIO()
-        qr.save(buf)
-        st.image(buf)
+            qr = qrcode.make(student_link)
+            buf = BytesIO()
+            qr.save(buf)
 
-        st.code(full_link, language="text")
-
-        if st.button("Close Session"):
-            st.session_state.session_active = False
+            st.image(buf)
+            st.code(student_link)
 
     # -------- AI INSIGHT --------
     if st.button("Generate AI Insight"):
@@ -107,9 +103,9 @@ Responses:
                 )
                 st.write(response.choices[0].message.content)
 
-# =================================================
-# STUDENT PANEL
-# =================================================
+# =====================================================
+# 🎓 STUDENT PANEL
+# =====================================================
 if mode == "Student":
     params = st.query_params
     session = params.get("session")
@@ -120,8 +116,8 @@ if mode == "Student":
     else:
         st.title("Answer Questions")
 
-        name = st.text_input("Your Name (optional)")
-        roll = st.text_input("Roll No (optional)")
+        name = st.text_input("Your Name")
+        roll = st.text_input("Roll No")
 
         answers = []
 
@@ -137,7 +133,8 @@ if mode == "Student":
         )
 
         if st.button("Submit"):
-            text = f"{name}-{roll}: " + " | ".join(answers) + f" (Confidence: {confidence})"
+            text = f"{name}-{roll}: " + " | ".join(answers) + f" ({confidence})"
             st.session_state.answers.append(text)
             st.success("Submitted")
+
 
