@@ -4,30 +4,47 @@ import qrcode
 from io import BytesIO
 import uuid
 
-# ---------- OPENAI ----------
+# ---------- CONFIG ----------
+TEACHER_PASSWORD = "WHITEmushroom@123"
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.set_page_config(page_title="Relia", layout="wide")
 
 # ---------- SESSION STATE ----------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 if "session_active" not in st.session_state:
     st.session_state.session_active = False
 if "session_id" not in st.session_state:
     st.session_state.session_id = ""
 if "questions" not in st.session_state:
-    st.session_state.questions = [""] * 25
-if "answers" not in st.session_state:
-    st.session_state.answers = []
-if "meta" not in st.session_state:
-    st.session_state.meta = {}
+    st.session_state.questions = [""] * 10
+if "responses" not in st.session_state:
+    st.session_state.responses = []
+if "allow_anonymous" not in st.session_state:
+    st.session_state.allow_anonymous = True
 
 mode = st.sidebar.radio("Mode", ["Teacher", "Student"])
 
 # =====================================================
-# 🧑‍🏫 TEACHER PANEL
+# TEACHER LOGIN
 # =====================================================
-if mode == "Teacher":
-    st.title("Relia — Teacher Panel")
+if mode == "Teacher" and not st.session_state.logged_in:
+    st.title("Relia Teacher Login")
+    pwd = st.text_input("Enter password", type="password")
+
+    if st.button("Login"):
+        if pwd == TEACHER_PASSWORD:
+            st.session_state.logged_in = True
+            st.success("Login successful")
+        else:
+            st.error("Wrong password")
+
+# =====================================================
+# TEACHER PANEL
+# =====================================================
+if mode == "Teacher" and st.session_state.logged_in:
+    st.title("Relia — Classroom Panel")
 
     coaching = st.text_input("Coaching Name")
     teacher = st.text_input("Teacher Name")
@@ -35,43 +52,37 @@ if mode == "Teacher":
     batch = st.text_input("Batch")
 
     session_type = st.selectbox(
-        "Select Mode",
+        "Session Type",
         ["Instant Insight", "Revision", "Test"]
+    )
+
+    st.session_state.allow_anonymous = st.checkbox(
+        "Allow anonymous answers",
+        value=True
     )
 
     st.divider()
     st.subheader("Enter Questions")
 
-    for i in range(5):  # keep 5 for MVP
+    for i in range(5):
         st.session_state.questions[i] = st.text_input(
             f"Question {i+1}",
             st.session_state.questions[i]
         )
 
     # -------- START SESSION --------
-    if st.button("Generate QR & Start Session"):
+    if st.button("Start Session & Generate QR"):
         st.session_state.session_active = True
-        st.session_state.session_id = str(uuid.uuid4())[:8]
-        st.session_state.meta = {
-            "coaching": coaching,
-            "teacher": teacher,
-            "subject": subject,
-            "batch": batch,
-            "type": session_type,
-        }
-        st.session_state.answers = []
+        st.session_state.session_id = str(uuid.uuid4())[:6]
+        st.session_state.responses = []
 
     # -------- SHOW QR --------
     if st.session_state.session_active:
-        st.success("Session Live")
+        st.success(f"Session Live | Code: {st.session_state.session_id}")
 
-        app_url = st.text_input(
-            "Paste your Streamlit app link once (save for future)",
-            ""
-        )
-
-        if app_url:
-            student_link = f"{app_url}?session={st.session_state.session_id}"
+        base = st.text_input("Paste your app link once")
+        if base:
+            student_link = f"{base}?mode=student&session={st.session_state.session_id}"
 
             qr = qrcode.make(student_link)
             buf = BytesIO()
@@ -80,21 +91,26 @@ if mode == "Teacher":
             st.image(buf)
             st.code(student_link)
 
+    # -------- STOP SESSION --------
+    if st.button("Stop Session"):
+        st.session_state.session_active = False
+
     # -------- AI INSIGHT --------
     if st.button("Generate AI Insight"):
-        if len(st.session_state.answers) == 0:
-            st.warning("No student answers yet")
+        if len(st.session_state.responses) == 0:
+            st.warning("No responses yet")
         else:
-            text = "\n".join(st.session_state.answers)
+            combined = "\n".join(st.session_state.responses)
 
             prompt = f"""
-Analyze these student responses and tell teacher:
+Analyze class responses and give teacher insight:
 1. Overall understanding
 2. Weak areas
 3. What to reteach
 4. Class level
+
 Responses:
-{text}
+{combined}
 """
             with st.spinner("Analyzing class..."):
                 response = client.chat.completions.create(
@@ -104,7 +120,7 @@ Responses:
                 st.write(response.choices[0].message.content)
 
 # =====================================================
-# 🎓 STUDENT PANEL
+# STUDENT PANEL
 # =====================================================
 if mode == "Student":
     params = st.query_params
@@ -114,27 +130,26 @@ if mode == "Student":
         st.title("Relia Student")
         st.info("Scan QR from teacher")
     else:
-        st.title("Answer Questions")
+        st.title("Answer")
 
-        name = st.text_input("Your Name")
-        roll = st.text_input("Roll No")
+        if not st.session_state.allow_anonymous:
+            name = st.text_input("Name")
+        else:
+            name = st.text_input("Name (optional)")
 
         answers = []
-
         for i in range(5):
             q = st.session_state.questions[i]
             if q:
-                ans = st.text_area(f"{q}")
+                ans = st.text_area(q)
                 answers.append(ans)
 
         confidence = st.selectbox(
-            "Confidence level",
+            "Confidence",
             ["Low", "Medium", "High"]
         )
 
         if st.button("Submit"):
-            text = f"{name}-{roll}: " + " | ".join(answers) + f" ({confidence})"
-            st.session_state.answers.append(text)
+            entry = f"{name}: {' | '.join(answers)} ({confidence})"
+            st.session_state.responses.append(entry)
             st.success("Submitted")
-
-
