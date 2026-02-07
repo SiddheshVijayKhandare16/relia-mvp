@@ -2,23 +2,25 @@ import streamlit as st
 
 st.set_page_config(page_title="Relia", layout="centered")
 
-# ---- MODE SELECT ----
-mode = st.sidebar.radio("Select Mode", ["Teacher", "Student"])
+# =========================
+# READ MODE FROM URL
+# =========================
+query_params = st.query_params
+mode = query_params.get("mode", "student")
 
-# ---- SESSION STORAGE ----
+# =========================
+# SESSION STORAGE
+# =========================
 if "questions" not in st.session_state:
     st.session_state.questions = [""] * 25
 
-if "submitted" not in st.session_state:
-    st.session_state.submitted = False
-
-# ===============================
+# =========================
 # TEACHER PAGE
-# ===============================
-if mode == "Teacher":
+# =========================
+if mode == "teacher":
     st.title("Relia – Teacher Panel")
 
-    st.write("Enter today's 25 questions:")
+    st.info("Save questions and send student link")
 
     for i in range(25):
         st.session_state.questions[i] = st.text_input(
@@ -27,12 +29,17 @@ if mode == "Teacher":
         )
 
     if st.button("Save Questions"):
-        st.success("Questions saved. Send students to Student page.")
+        st.success("Questions saved")
 
-# ===============================
+    st.divider()
+
+    st.subheader("📎 Student Link")
+    st.code("Open same app with ?mode=student", language="text")
+
+# =========================
 # STUDENT PAGE
-# ===============================
-if mode == "Student":
+# =========================
+else:
     st.title("Relia – Student Answer Page")
 
     answers = []
@@ -44,5 +51,3 @@ if mode == "Student":
 
     if st.button("Submit All Answers"):
         st.success("Answers submitted successfully")
-
-
