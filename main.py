@@ -2,143 +2,126 @@ import streamlit as st
 import uuid
 from openai import OpenAI
 
-# -----------------------------
-# CONFIG
-# -----------------------------
 st.set_page_config(page_title="Relia", layout="wide")
 
-# 🔐 Password for teacher login (change later)
+# ---------------- CONFIG ----------------
+APP_URL = "https://relia-mvp-qselxk47cwgfz3mbatjxa9.streamlit.app"
 TEACHER_PASSWORD = "WHITEmushroom@123"
 
-# OpenAI client
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# -----------------------------
-# SESSION STATE
-# -----------------------------
-if "session_id" not in st.session_state:
-    st.session_state.session_id = None
-
-if "questions" not in st.session_state:
-    st.session_state.questions = [""] * 5
-
-if "responses" not in st.session_state:
-    st.session_state.responses = []
-
-if "session_active" not in st.session_state:
-    st.session_state.session_active = False
-
-# -----------------------------
-# MODE DETECTION
-# -----------------------------
+# ---------------- MODE ----------------
 query = st.query_params
 mode = query.get("mode", "student")
 
-# =========================================================
-# 🧑‍🏫 TEACHER PANEL
-# =========================================================
+# ---------------- SESSION STORAGE ----------------
+if "sessions" not in st.session_state:
+    st.session_state.sessions = {}
+
+# =====================================================
+# 👩‍🏫 TEACHER PANEL
+# =====================================================
 if mode == "teacher":
 
     st.title("Relia – Teacher Panel")
 
-    # 🔐 LOGIN
-    if "logged_in" not in st.session_state:
-        password = st.text_input("Enter teacher password", type="password")
+    # ---- LOGIN ----
+    if "logged" not in st.session_state:
+        pwd = st.text_input("Enter teacher password", type="password")
         if st.button("Login"):
-            if password == TEACHER_PASSWORD:
-                st.session_state.logged_in = True
+            if pwd == TEACHER_PASSWORD:
+                st.session_state.logged = True
                 st.rerun()
             else:
                 st.error("Wrong password")
         st.stop()
 
-    # -----------------------------
-    # QUESTIONS INPUT
-    # -----------------------------
-    st.subheader("Enter today's questions")
+    coaching = st.text_input("Coaching Name")
+    teacher = st.text_input("Teacher Name")
+    subject = st.text_input("Subject")
+    batch = st.text_input("Batch")
 
+    st.subheader("Enter Questions")
+    questions = []
     for i in range(5):
-        st.session_state.questions[i] = st.text_input(
-            f"Question {i+1}",
-            value=st.session_state.questions[i]
-        )
+        q = st.text_input(f"Question {i+1}", key=f"q{i}")
+        questions.append(q)
 
-    # -----------------------------
-    # START SESSION
-    # -----------------------------
     if st.button("Start Session & Generate QR"):
-        st.session_state.session_id = str(uuid.uuid4())[:6]
-        st.session_state.responses = []
-        st.session_state.session_active = True
+        session_id = str(uuid.uuid4())[:6]
 
-    # -----------------------------
-    # SESSION LIVE
-    # -----------------------------
-    if st.session_state.session_active:
+        st.session_state.sessions[session_id] = {
+            "coaching": coaching,
+            "teacher": teacher,
+            "subject": subject,
+            "batch": batch,
+            "questions": questions,
+            "responses": []
+        }
 
-        st.success(f"Session Live | Code: {st.session_state.session_id}")
+        st.session_state.current_session = session_id
 
-student_link = f"https://relia-mvp-qselxk47cwgfz3mbatjxa9.streamlit.app/?mode=student&session={st.session_state.session_id}"
+    # ---- SESSION LIVE ----
+    if "current_session" in st.session_state:
+
+        session_id = st.session_state.current_session
+        student_link = f"{APP_URL}/?mode=student&session={session_id}"
+
+        st.success(f"Session Live | Code: {session_id}")
 
         st.markdown("### Student QR")
         st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={student_link}")
 
-        st.markdown("### Student Link")
         st.code(student_link)
 
-        if st.button("Stop Session"):
-            st.session_state.session_active = False
-            st.rerun()
+        if st.button("Generate AI Insight"):
+            data = st.session_state.sessions[session_id]["responses"]
 
-    # -----------------------------
-    # AI INSIGHT
-    # -----------------------------
-    st.divider()
-    st.subheader("Generate AI Insight")
+            if not data:
+                st.warning("No student responses yet")
+            else:
+                text = "\n".join(data)
 
-    if st.button("Generate AI Insight"):
-
-        if not st.session_state.responses:
-            st.warning("No student answers yet")
-        else:
-            all_text = "\n".join(st.session_state.responses)
-
-            prompt = f"""
-You are an expert teacher coach.
-
-Analyze student answers and give:
-
-1. Student understanding summary  
-2. Where students are confused  
-3. Teaching suggestions  
-4. Class performance level  
+                prompt = f"""
+Analyze student answers and tell teacher:
+1. Overall understanding
+2. Weak areas
+3. What to reteach
+4. Class performance
 
 Answers:
-{all_text}
+{text}
 """
+                with st.spinner("Analyzing class..."):
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": prompt}],
+                    )
 
-            with st.spinner("Analyzing class..."):
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.3,
-                )
+                st.write(response.choices[0].message.content)
 
-            st.success("AI Insight Generated")
-            st.write(response.choices[0].message.content)
-
-# =========================================================
+# =====================================================
 # 👨‍🎓 STUDENT PAGE
-# =========================================================
+# =====================================================
 else:
 
-    st.title("Relia – Student Answer Page")
+    st.title("Relia – Student Page")
 
-    session = query.get("session")
+    session_id = query.get("session")
 
-    if not session:
-        st.warning("Session not started by teacher")
+    if not session_id:
+        st.warning("Session not started")
         st.stop()
+
+    if session_id not in st.session_state.sessions:
+        st.warning("Invalid session")
+        st.stop()
+
+    data = st.session_state.sessions[session_id]
+
+    st.write(f"**Teacher:** {data['teacher']}")
+    st.write(f"**Subject:** {data['subject']}")
+    st.write(f"**Batch:** {data['batch']}")
 
     name = st.text_input("Your Name")
     roll = st.text_input("Roll No")
@@ -146,23 +129,14 @@ else:
 
     answers = []
 
-    for i, q in enumerate(st.session_state.questions):
-        if q.strip() != "":
-            ans = st.text_area(q, key=f"ans_{i}")
+    for q in data["questions"]:
+        if q:
+            ans = st.text_area(q)
             answers.append(ans)
 
-    confidence = st.slider("Confidence level", 1, 5)
+    confidence = st.slider("Confidence", 1, 5)
 
-    if st.button("Submit Answers"):
-
-        combined = f"""
-Name: {name}
-Roll: {roll}
-Batch: {batch}
-Confidence: {confidence}
-
-Answers:
-{answers}
-"""
-        st.session_state.responses.append(combined)
-        st.success("Submitted successfully")
+    if st.button("Submit"):
+        entry = f"{name} | {roll} | {batch} | Confidence:{confidence} | Answers:{answers}"
+        st.session_state.sessions[session_id]["responses"].append(entry)
+        st.success("Submitted")
