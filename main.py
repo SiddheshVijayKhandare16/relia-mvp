@@ -1,76 +1,73 @@
 import streamlit as st
-from openai import OpenAI
-
-# 🔑 PASTE YOUR OPENAI KEY HERE
-client = OpenAI(api_key="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")
+import openai
 
 st.set_page_config(page_title="Relia", layout="wide")
 
-# -------------------------------
-# Mode select
-# -------------------------------
-mode = st.sidebar.radio("Select Mode", ["Teacher", "Student"])
+# Get API key
+openai.api_key = st.secrets.get("OPENAI_API_KEY")
 
-# -------------------------------
-# Storage
-# -------------------------------
+st.title("Relia")
+
+mode = st.radio("Select Mode", ["Teacher", "Student"])
+
+# Store questions
 if "questions" not in st.session_state:
     st.session_state.questions = [""] * 25
 
+# Store answers
 if "answers" not in st.session_state:
     st.session_state.answers = [""] * 25
 
-# -------------------------------
-# TEACHER PAGE
-# -------------------------------
+
+# ---------------- TEACHER MODE ----------------
 if mode == "Teacher":
-    st.title("Relia – Teacher Panel")
-    st.subheader("Enter today's 25 questions")
+    st.header("Relia – Teacher Panel")
 
     for i in range(25):
-        st.session_state.questions[i] = st.text_input(
-            f"Question {i+1}",
-            value=st.session_state.questions[i],
-            key=f"q{i}"
-        )
+        q = st.text_input(f"Question {i+1}", st.session_state.questions[i], key=f"q{i}")
+        st.session_state.questions[i] = q
 
-    if st.button("Generate Class Insight"):
-        all_answers = "\n".join([
-            f"Q{i+1}: {st.session_state.questions[i]} \nA: {st.session_state.answers[i]}"
-            for i in range(25) if st.session_state.answers[i] != ""
-        ])
+    st.divider()
 
-        if all_answers.strip() == "":
-            st.warning("No student answers yet")
-        else:
-            with st.spinner("AI analysing class understanding..."):
+    if st.button("Generate AI Insight"):
+        with st.spinner("Analyzing student answers..."):
+            all_answers = "\n".join([a for a in st.session_state.answers if a.strip() != ""])
 
-                response = client.chat.completions.create(
+            if all_answers.strip() == "":
+                st.warning("No student answers yet")
+            else:
+                prompt = f"""
+You are an expert teacher.
+
+Analyze these student answers and give:
+1. Overall class understanding
+2. Weak areas
+3. What teacher should reteach
+4. Smart teaching suggestion
+
+Student answers:
+{all_answers}
+"""
+
+                response = openai.ChatCompletion.create(
                     model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "You are an expert teacher coach. Analyse student understanding and give short teacher insight."},
-                        {"role": "user", "content": f"Analyse this class response and tell teacher: overall understanding, weak students, strong students, and what to reteach:\n{all_answers}"}
-                    ]
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3,
                 )
 
                 insight = response.choices[0].message.content
-                st.success("Teacher Insight")
+                st.subheader("AI Teacher Insight")
                 st.write(insight)
 
-# -------------------------------
-# STUDENT PAGE
-# -------------------------------
-if mode == "Student":
-    st.title("Relia – Student Answer Page")
 
-    for i in range(25):
-        q = st.session_state.questions[i]
+# ---------------- STUDENT MODE ----------------
+if mode == "Student":
+    st.header("Relia – Student Answer Page")
+
+    for i, q in enumerate(st.session_state.questions):
         if q.strip() != "":
-            st.session_state.answers[i] = st.text_area(
-                f"Q{i+1}: {q}",
-                value=st.session_state.answers[i],
-                key=f"a{i}"
-            )
+            ans = st.text_area(f"Q{i+1}: {q}", key=f"a{i}")
+            st.session_state.answers[i] = ans
 
     if st.button("Submit All Answers"):
         st.success("Answers submitted successfully")
