@@ -1,142 +1,149 @@
 import streamlit as st
+import json
 import uuid
+import firebase_admin
+from firebase_admin import credentials, firestore
 from openai import OpenAI
 
+# ----------------- CONFIG -----------------
 st.set_page_config(page_title="Relia", layout="wide")
 
-# ---------------- CONFIG ----------------
-APP_URL = "https://relia-mvp-qselxk47cwgfz3mbatjxa9.streamlit.app"
-TEACHER_PASSWORD = "WHITEmushroom@123"
+# ----------------- FIREBASE CONNECT -----------------
+if not firebase_admin._apps:
+    cred = credentials.Certificate("firebase_key.json")
+    firebase_admin.initialize_app(cred)
 
+db = firestore.client()
+
+# ----------------- OPENAI -----------------
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ---------------- MODE ----------------
+# ----------------- MODE -----------------
 query = st.query_params
-mode = query.get("mode", "student")
+mode = query.get("mode", "teacher")
+session_id = query.get("session", None)
 
-# ---------------- SESSION STORAGE ----------------
-if "sessions" not in st.session_state:
-    st.session_state.sessions = {}
-
-# =====================================================
-# 👩‍🏫 TEACHER PANEL
-# =====================================================
-if mode == "teacher":
-
-    st.title("Relia – Teacher Panel")
-
-    # ---- LOGIN ----
-    if "logged" not in st.session_state:
-        pwd = st.text_input("Enter teacher password", type="password")
-        if st.button("Login"):
-            if pwd == TEACHER_PASSWORD:
-                st.session_state.logged = True
-                st.rerun()
-            else:
-                st.error("Wrong password")
-        st.stop()
-
-    coaching = st.text_input("Coaching Name")
-    teacher = st.text_input("Teacher Name")
-    subject = st.text_input("Subject")
-    batch = st.text_input("Batch")
-
-    st.subheader("Enter Questions")
-    questions = []
-    for i in range(5):
-        q = st.text_input(f"Question {i+1}", key=f"q{i}")
-        questions.append(q)
-
-    if st.button("Start Session & Generate QR"):
-        session_id = str(uuid.uuid4())[:6]
-
-        st.session_state.sessions[session_id] = {
-            "coaching": coaching,
-            "teacher": teacher,
-            "subject": subject,
-            "batch": batch,
-            "questions": questions,
-            "responses": []
-        }
-
-        st.session_state.current_session = session_id
-
-    # ---- SESSION LIVE ----
-    if "current_session" in st.session_state:
-
-        session_id = st.session_state.current_session
-        student_link = f"{APP_URL}/?mode=student&session={session_id}"
-
-        st.success(f"Session Live | Code: {session_id}")
-
-        st.markdown("### Student QR")
-        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={student_link}")
-
-        st.code(student_link)
-
-        if st.button("Generate AI Insight"):
-            data = st.session_state.sessions[session_id]["responses"]
-
-            if not data:
-                st.warning("No student responses yet")
-            else:
-                text = "\n".join(data)
-
-                prompt = f"""
-Analyze student answers and tell teacher:
-1. Overall understanding
-2. Weak areas
-3. What to reteach
-4. Class performance
-
-Answers:
-{text}
-"""
-                with st.spinner("Analyzing class..."):
-                    response = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": prompt}],
-                    )
-
-                st.write(response.choices[0].message.content)
-
-# =====================================================
-# 👨‍🎓 STUDENT PAGE
-# =====================================================
-else:
+# ----------------- STUDENT PAGE -----------------
+if mode == "student":
 
     st.title("Relia – Student Page")
 
-    session_id = query.get("session")
-
     if not session_id:
-        st.warning("Session not started")
+        st.error("Invalid session")
         st.stop()
 
-    if session_id not in st.session_state.sessions:
-        st.warning("Invalid session")
+    session_ref = db.collection("sessions").document(session_id).get()
+
+    if not session_ref.exists:
+        st.error("Session not found")
         st.stop()
 
-    data = st.session_state.sessions[session_id]
+    session_data = session_ref.to_dict()
 
-    st.write(f"**Teacher:** {data['teacher']}")
-    st.write(f"**Subject:** {data['subject']}")
-    st.write(f"**Batch:** {data['batch']}")
+    if not session_data.get("active"):
+        st.warning("Session closed")
+        st.stop()
 
-    name = st.text_input("Your Name")
+    questions = session_data.get("questions", [])
+
+    st.subheader("Enter Details")
+    name = st.text_input("Student Name")
     roll = st.text_input("Roll No")
-    batch = st.text_input("Batch")
 
     answers = []
 
-    for q in data["questions"]:
+    st.subheader("Answer Questions")
+
+    for i, q in enumerate(questions):
+        ans = st.text_area(f"Q{i+1}: {q}")
+        conf = st.slider(f"Confidence Q{i+1}", 1, 5, 3)
+        answers.append({"question": q, "answer": ans, "confidence": conf})
+
+    if st.button("Submit Answers"):
+        db.collection("responses").add({
+            "session": session_id,
+            "name": name,
+            "roll": roll,
+            "answers": answers
+        })
+        st.success("Submitted successfully")
+
+# ----------------- TEACHER PAGE -----------------
+else:
+
+    st.title("Relia – Teacher Panel")
+
+    st.subheader("Enter Questions")
+
+    questions = []
+    for i in range(5):
+        q = st.text_input(f"Question {i+1}")
         if q:
-            ans = st.text_area(q)
-            answers.append(ans)
+            questions.append(q)
 
-    confidence = st.slider("Confidence", 1, 5)
+    if "session_live" not in st.session_state:
+        st.session_state.session_live = False
+        st.session_state.session_id = ""
 
-    if st.button("Submit"):
-        entry = f"{name} | {roll} | {batch} | Confidence:{confidence} | Answers:{answers}"
-        st.session_state.sessions[session_id]["responses"].append(entry)
-        st.success("Submitted")
+    if st.button("Start Session & Generate QR"):
+        if len(questions) == 0:
+            st.error("Enter at least 1 question")
+        else:
+            sid = str(uuid.uuid4())[:6]
+            st.session_state.session_id = sid
+            st.session_state.session_live = True
+
+            db.collection("sessions").document(sid).set({
+                "active": True,
+                "questions": questions
+            })
+
+    if st.session_state.session_live:
+        sid = st.session_state.session_id
+
+        st.success(f"Session Live | Code: {sid}")
+
+        student_link = f"https://relia-mvp-qselxk47cwgfz3mbatjxa9.streamlit.app/?mode=student&session={sid}"
+        st.markdown("### Student Link")
+        st.code(student_link)
+
+        st.markdown("### QR Code")
+        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={student_link}")
+
+        if st.button("Stop Session"):
+            db.collection("sessions").document(sid).update({"active": False})
+            st.session_state.session_live = False
+            st.warning("Session stopped")
+
+        if st.button("Generate AI Insight"):
+            responses = db.collection("responses").where("session","==",sid).stream()
+
+            full_text = ""
+            for r in responses:
+                data = r.to_dict()
+                full_text += json.dumps(data) + "\n"
+
+            if full_text == "":
+                st.warning("No responses yet")
+            else:
+                prompt = f"""
+                Analyze student understanding from responses:
+                {full_text}
+
+                Give:
+                1. Understanding summary
+                2. Where confused
+                3. Teaching suggestions
+                4. Class level
+                """
+
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role":"user","content":prompt}],
+                    temperature=0.3,
+                )
+
+                insight = response.choices[0].message.content
+                st.markdown("## AI Insight")
+                st.write(insight)
+
