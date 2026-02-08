@@ -1,3 +1,5 @@
 streamlit
 openai
+firebase-admin
 qrcode
+pillow
