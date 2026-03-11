@@ -1,30 +1,31 @@
 import streamlit as st
 import json
 import uuid
-import firebase_admin
 import urllib.parse
+import firebase_admin
 from firebase_admin import credentials, firestore
 from openai import OpenAI
 
-# ----------------- CONFIG -----------------
+# ---------------- CONFIG ----------------
 st.set_page_config(page_title="Relia", layout="wide")
 
-# ----------------- FIREBASE CONNECT -----------------
+# ---------------- FIREBASE CONNECT ----------------
 if not firebase_admin._apps:
-    cred = credentials.Certificate("firebase_key.json")
+    firebase_key = json.loads(st.secrets["FIREBASE_KEY"])
+    cred = credentials.Certificate(firebase_key)
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
-# ----------------- OPENAI -----------------
+# ---------------- OPENAI ----------------
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ----------------- MODE -----------------
+# ---------------- MODE ----------------
 query = st.query_params
 mode = query.get("mode", "teacher")
 session_id = query.get("session", None)
 
-# ----------------- STUDENT PAGE -----------------
+# ---------------- STUDENT PAGE ----------------
 if mode == "student":
 
     st.title("Relia – Student Page")
@@ -48,6 +49,7 @@ if mode == "student":
     questions = session_data.get("questions", [])
 
     st.subheader("Enter Details")
+
     name = st.text_input("Student Name")
     roll = st.text_input("Roll No")
 
@@ -58,18 +60,25 @@ if mode == "student":
     for i, q in enumerate(questions):
         ans = st.text_area(f"Q{i+1}: {q}")
         conf = st.slider(f"Confidence Q{i+1}", 1, 5, 3)
-        answers.append({"question": q, "answer": ans, "confidence": conf})
+
+        answers.append({
+            "question": q,
+            "answer": ans,
+            "confidence": conf
+        })
 
     if st.button("Submit Answers"):
+
         db.collection("responses").add({
             "session": session_id,
             "name": name,
             "roll": roll,
             "answers": answers
         })
+
         st.success("Submitted successfully")
 
-# ----------------- TEACHER PAGE -----------------
+# ---------------- TEACHER PAGE ----------------
 else:
 
     st.title("Relia – Teacher Panel")
@@ -77,14 +86,11 @@ else:
     st.subheader("Enter Questions")
 
     questions = []
+
     for i in range(5):
         q = st.text_input(f"Question {i+1}")
         if q:
             questions.append(q)
-
-    if "session_live" not in st.session_state:
-        st.session_state.session_live = False
-        st.session_state.session_id = ""
 
     if st.button("Start Session & Generate QR"):
 
@@ -92,81 +98,90 @@ else:
             st.error("Enter at least 1 question")
 
         else:
-            sid = str(uuid.uuid4())[:6]
 
-            st.session_state.session_id = sid
-            st.session_state.session_live = True
+            sid = str(uuid.uuid4())[:6]
 
             db.collection("sessions").document(sid).set({
                 "active": True,
                 "questions": questions
             })
 
-    if st.session_state.session_live:
+            st.success(f"Session Live | Code: {sid}")
 
-        sid = st.session_state.session_id
+            student_link = f"https://relia-mvp-qselxk47cwgfz3mbatjxa9.streamlit.app/?mode=student&session={sid}"
 
-        st.success(f"Session Live | Code: {sid}")
+            st.markdown("### Student Link")
+            st.code(student_link)
 
-        student_link = f"https://relia-mvp-qselxk47cwgfz3mbatjxa9.streamlit.app/?mode=student&session={sid}"
+            st.markdown("### QR Code")
 
-        st.markdown("### Student Link")
-        st.code(student_link)
+            encoded_link = urllib.parse.quote(student_link, safe="")
 
-        # ---------- QR FIX ----------
-        st.markdown("### QR Code")
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={encoded_link}"
 
-        encoded_link = urllib.parse.quote(student_link, safe="")
-        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={encoded_link}"
+            st.image(qr_url)
 
-        st.image(qr_url)
+            # -------- STUDENT RESPONSES --------
 
-        # ---------- STOP SESSION ----------
-        if st.button("Stop Session"):
-
-            db.collection("sessions").document(sid).update({
-                "active": False
-            })
-
-            st.session_state.session_live = False
-            st.warning("Session stopped")
-
-        # ---------- AI INSIGHT ----------
-        if st.button("Generate AI Insight"):
+            st.markdown("### Student Responses")
 
             responses = db.collection("responses").where("session","==",sid).stream()
 
-            full_text = ""
+            count = 0
 
             for r in responses:
+
+                count += 1
+
                 data = r.to_dict()
-                full_text += json.dumps(data) + "\n"
 
-            if full_text == "":
-                st.warning("No responses yet")
+                st.write(f"Student: {data.get('name','Anonymous')} | Roll: {data.get('roll','')}")
 
-            else:
+                for ans in data.get("answers", []):
+                    st.write(f"Q: {ans['question']}")
+                    st.write(f"Answer: {ans['answer']}")
+                    st.write(f"Confidence: {ans['confidence']}")
+                    st.write("---")
 
-                prompt = f"""
-                Analyze student understanding from responses:
+            st.info(f"Total responses: {count}")
 
-                {full_text}
+            # -------- AI INSIGHT --------
 
-                Give:
-                1. Understanding summary
-                2. Where confused
-                3. Teaching suggestions
-                4. Class level
-                """
+            if st.button("Generate AI Insight"):
 
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role":"user","content":prompt}],
-                    temperature=0.3,
-                )
+                responses = db.collection("responses").where("session","==",sid).stream()
 
-                insight = response.choices[0].message.content
+                full_text = ""
 
-                st.markdown("## AI Insight")
-                st.write(insight)
+                for r in responses:
+                    data = r.to_dict()
+                    full_text += json.dumps(data) + "\n"
 
+                if full_text == "":
+                    st.warning("No responses yet")
+
+                else:
+
+                    prompt = f"""
+                    Analyze student understanding from responses:
+
+                    {full_text}
+
+                    Give:
+                    1. Understanding summary
+                    2. Where confused
+                    3. Teaching suggestions
+                    4. Class level
+                    """
+
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role":"user","content":prompt}],
+                        temperature=0.3,
+                    )
+
+                    insight = response.choices[0].message.content
+
+                    st.markdown("## AI Insight")
+
+                    st.write(insight)
