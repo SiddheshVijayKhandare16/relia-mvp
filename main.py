@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import uuid
 import firebase_admin
+import urllib.parse
 from firebase_admin import credentials, firestore
 from openai import OpenAI
 
@@ -86,10 +87,13 @@ else:
         st.session_state.session_id = ""
 
     if st.button("Start Session & Generate QR"):
+
         if len(questions) == 0:
             st.error("Enter at least 1 question")
+
         else:
             sid = str(uuid.uuid4())[:6]
+
             st.session_state.session_id = sid
             st.session_state.session_live = True
 
@@ -99,35 +103,53 @@ else:
             })
 
     if st.session_state.session_live:
+
         sid = st.session_state.session_id
 
         st.success(f"Session Live | Code: {sid}")
 
         student_link = f"https://relia-mvp-qselxk47cwgfz3mbatjxa9.streamlit.app/?mode=student&session={sid}"
+
         st.markdown("### Student Link")
         st.code(student_link)
 
+        # ---------- QR FIX ----------
         st.markdown("### QR Code")
-        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={student_link}")
 
+        encoded_link = urllib.parse.quote(student_link, safe="")
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={encoded_link}"
+
+        st.image(qr_url)
+
+        # ---------- STOP SESSION ----------
         if st.button("Stop Session"):
-            db.collection("sessions").document(sid).update({"active": False})
+
+            db.collection("sessions").document(sid).update({
+                "active": False
+            })
+
             st.session_state.session_live = False
             st.warning("Session stopped")
 
+        # ---------- AI INSIGHT ----------
         if st.button("Generate AI Insight"):
+
             responses = db.collection("responses").where("session","==",sid).stream()
 
             full_text = ""
+
             for r in responses:
                 data = r.to_dict()
                 full_text += json.dumps(data) + "\n"
 
             if full_text == "":
                 st.warning("No responses yet")
+
             else:
+
                 prompt = f"""
                 Analyze student understanding from responses:
+
                 {full_text}
 
                 Give:
@@ -144,6 +166,7 @@ else:
                 )
 
                 insight = response.choices[0].message.content
+
                 st.markdown("## AI Insight")
                 st.write(insight)
 
