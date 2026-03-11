@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import json
 import uuid
@@ -11,8 +12,7 @@ st.set_page_config(page_title="Relia", layout="wide")
 
 # ---------------- FIREBASE CONNECT ----------------
 if not firebase_admin._apps:
-    firebase_key = json.loads(st.secrets["FIREBASE_KEY"])
-    cred = credentials.Certificate(firebase_key)
+    cred = credentials.Certificate("firebase_key.json")
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
@@ -121,8 +121,6 @@ else:
 
             st.image(qr_url)
 
-            # -------- STUDENT RESPONSES --------
-
             st.markdown("### Student Responses")
 
             responses = db.collection("responses").where("session","==",sid).stream()
@@ -132,7 +130,6 @@ else:
             for r in responses:
 
                 count += 1
-
                 data = r.to_dict()
 
                 st.write(f"Student: {data.get('name','Anonymous')} | Roll: {data.get('roll','')}")
@@ -144,8 +141,6 @@ else:
                     st.write("---")
 
             st.info(f"Total responses: {count}")
-
-            # -------- AI INSIGHT --------
 
             if st.button("Generate AI Insight"):
 
@@ -163,16 +158,16 @@ else:
                 else:
 
                     prompt = f"""
-                    Analyze student understanding from responses:
+Analyze student understanding from responses:
 
-                    {full_text}
+{full_text}
 
-                    Give:
-                    1. Understanding summary
-                    2. Where confused
-                    3. Teaching suggestions
-                    4. Class level
-                    """
+Give:
+1. Understanding summary
+2. Where confused
+3. Teaching suggestions
+4. Class level
+"""
 
                     response = client.chat.completions.create(
                         model="gpt-4o-mini",
@@ -183,5 +178,5 @@ else:
                     insight = response.choices[0].message.content
 
                     st.markdown("## AI Insight")
-
                     st.write(insight)
+```
