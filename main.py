@@ -1,12 +1,12 @@
 import streamlit as st
-import json
-import uuid
-import urllib.parse
 import firebase_admin
 from firebase_admin import credentials, firestore
+import uuid
+import urllib.parse
+import json
 from openai import OpenAI
 
-# ---------------- CONFIG ----------------
+# ---------------- STREAMLIT CONFIG ----------------
 st.set_page_config(page_title="Relia", layout="wide")
 
 # ---------------- FIREBASE CONNECT ----------------
@@ -24,7 +24,7 @@ query = st.query_params
 mode = query.get("mode", "teacher")
 session_id = query.get("session", None)
 
-# ---------------- STUDENT PAGE ----------------
+# ================= STUDENT PAGE =================
 if mode == "student":
 
     st.title("Relia – Student Page")
@@ -77,7 +77,7 @@ if mode == "student":
 
         st.success("Submitted successfully")
 
-# ---------------- TEACHER PAGE ----------------
+# ================= TEACHER PAGE =================
 else:
 
     st.title("Relia – Teacher Panel")
@@ -112,44 +112,25 @@ else:
             st.markdown("### Student Link")
             st.code(student_link)
 
-            st.markdown("### QR Code")
-
             encoded_link = urllib.parse.quote(student_link, safe="")
 
             qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={encoded_link}"
 
+            st.markdown("### QR Code")
             st.image(qr_url)
 
-            st.markdown("### Student Responses")
+            st.markdown("### Responses")
 
             responses = db.collection("responses").where("session","==",sid).stream()
 
-            count = 0
+            full_text = ""
 
             for r in responses:
-
-                count += 1
                 data = r.to_dict()
-
-                st.write(f"Student: {data.get('name','Anonymous')} | Roll: {data.get('roll','')}")
-
-                for ans in data.get("answers", []):
-                    st.write(f"Q: {ans['question']}")
-                    st.write(f"Answer: {ans['answer']}")
-                    st.write(f"Confidence: {ans['confidence']}")
-                    st.write("---")
-
-            st.info(f"Total responses: {count}")
+                st.write(data)
+                full_text += json.dumps(data) + "\n"
 
             if st.button("Generate AI Insight"):
-
-                responses = db.collection("responses").where("session","==",sid).stream()
-
-                full_text = ""
-
-                for r in responses:
-                    data = r.to_dict()
-                    full_text += json.dumps(data) + "\n"
 
                 if full_text == "":
                     st.warning("No responses yet")
@@ -157,13 +138,13 @@ else:
                 else:
 
                     prompt = f"""
-Analyze student understanding from responses:
+Analyze student understanding from responses.
 
 {full_text}
 
 Give:
 1. Understanding summary
-2. Where confused
+2. Where students are confused
 3. Teaching suggestions
 4. Class level
 """
@@ -178,4 +159,3 @@ Give:
 
                     st.markdown("## AI Insight")
                     st.write(insight)
-
