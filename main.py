@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import json
 import uuid
@@ -179,4 +178,4 @@ Give:
 
                     st.markdown("## AI Insight")
                     st.write(insight)
-```
+
