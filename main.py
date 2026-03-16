@@ -11,7 +11,16 @@ st.set_page_config(page_title="Relia", layout="wide")
 
 # ---------------- FIREBASE CONNECT ----------------
 if not firebase_admin._apps:
-    cred = credentials.Certificate("firebase_key.json")
+    key_dict = {
+        "type": "service_account",
+        "project_id": st.secrets["FB_PROJECT_ID"],
+        "private_key_id": st.secrets["FB_KEY_ID"],
+        "private_key": st.secrets["FB_PRIVATE_KEY"],
+        "client_email": st.secrets["FB_CLIENT_EMAIL"],
+        "client_id": st.secrets["FB_CLIENT_ID"],
+        "token_uri": "https://oauth2.googleapis.com/token",
+    }
+    cred = credentials.Certificate(key_dict)
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
